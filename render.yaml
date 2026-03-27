@@ -1,0 +1,52 @@
+services:
+  # ─────────────────────────────────────────────────────────────────────────────
+  # ML Spam Detection API (Python Flask)
+  # ─────────────────────────────────────────────────────────────────────────────
+  - type: web
+    name: smail-ml-api
+    env: python
+    plan: free
+    region: oregon
+    buildCommand: pip install -r ml-engine/core/predictive/requirements.txt
+    startCommand: cd ml-engine/core/predictive && gunicorn -w 2 -b 0.0.0.0:10000 predict_api:app --timeout 60 --access-logfile -
+    envVars:
+      - key: ML_PORT
+        value: "10000"
+      - key: PYTHONUNBUFFERED
+        value: "1"
+    healthCheckPath: /health
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Backend Email Client (Node.js / Express)
+  # ─────────────────────────────────────────────────────────────────────────────
+  - type: web
+    name: smail-backend
+    env: node
+    plan: free
+    region: oregon
+    buildCommand: npm ci --production
+    startCommand: node backend/server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "10000"
+      - key: BASE_URL
+        value: https://smail-backend.onrender.com
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_CALLBACK_URL
+        value: https://smail-backend.onrender.com/auth/callback
+      - key: JWT_SECRET
+        sync: false
+      - key: ML_API_HOST
+        fromService:
+          name: smail-ml-api
+          property: host
+      - key: ML_API_PORT
+        value: "10000"
+      - key: SESSION_SECRET
+        sync: false
+    healthCheckPath: /
