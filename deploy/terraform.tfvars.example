@@ -1,0 +1,13 @@
+# Terraform Variables for GCP Deployment
+# Copy this file to terraform.tfvars and update with your values
+
+project_id = "smail-system-prod"
+region     = "us-central1"
+
+# **IMPORTANT: Change this to a strong password**
+db_password = "ChangeMe123!@#Secure"
+
+# Docker image URLs from Artifact Registry
+# Format: REGION-docker.pkg.dev/PROJECT_ID/REPO_NAME/IMAGE_NAME:TAG
+backend_image = "us-central1-docker.pkg.dev/smail-system-prod/smail-repo/smail-backend:latest"
+ml_api_image  = "us-central1-docker.pkg.dev/smail-system-prod/smail-repo/smail-ml-api:latest"

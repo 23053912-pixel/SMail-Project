@@ -1,0 +1,29 @@
+node_modules/
+.env
+*.env
+.env.*
+.DS_Store
+*.log
+.venv/
+dist/
+~$*.pptx
+
+# Database files (runtime generated)
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Build/Cache
+__pycache__/
+*.pyc
+.pytest_cache/

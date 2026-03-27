@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SMail</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Roboto:wght@300;400;500;700&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined">
+</head>
+<body>
+  <!-- Login Screen -->
+  <div id="loginScreen" class="login-screen">
+    <div class="login-card">
+      <div class="login-left">
+        <div class="brand-area">
+          <span class="material-icons-outlined brand-logo">mail</span>
+          <h1>SMail</h1>
+          <p>Your smart email experience</p>
+        </div>
+        <div class="features">
+          <div class="feature"><span class="material-icons-outlined">security</span> Secure Google Sign-In</div>
+          <div class="feature"><span class="material-icons-outlined">inbox</span> Real Gmail Integration</div>
+          <div class="feature"><span class="material-icons-outlined">send</span> Send & Receive Emails</div>
+        </div>
+      </div>
+      <div class="login-right">
+        <h2>Welcome</h2>
+        <p class="login-subtitle">Sign in to access your emails</p>
+        <button type="button" id="googleSignInBtn" class="google-oauth-btn">
+          <svg class="button-google-logo" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+            <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+            <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+            <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+          </svg>
+          Sign in with Google
+        </button>
+        <div id="loginMessage" class="login-message hidden"></div>
+        <p class="login-footer">Protected by Google OAuth 2.0</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="toast" class="toast hidden">
+    <span class="material-icons-outlined toast-icon">check_circle</span>
+    <span id="toastMessage"></span>
+  </div>
+
+  <!-- Main Application -->
+  <div id="mainApp" class="main-app hidden">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="header-left">
+        <button class="icon-btn menu-toggle" id="menuToggle">
+          <span class="material-icons-outlined">menu</span>
+        </button>
+        <span class="material-icons-outlined header-logo" id="headerLogo">mail</span>
+        <h1 class="header-brand" id="headerBrand">SMail</h1>
+      </div>
+      <div class="header-center">
+        <div class="search-wrapper">
+          <span class="material-icons-outlined search-icon">search</span>
+          <input type="text" id="searchInput" class="search-box" placeholder="Search in emails">
+        </div>
+      </div>
+      <div class="header-right">
+        <button class="icon-btn" title="Support" id="supportBtn">
+          <span class="material-icons-outlined">help_outline</span>
+        </button>
+        <button class="icon-btn" title="Switch to Light Pro" id="settingsBtn" aria-label="Switch to Light Pro">
+          <span class="material-icons-outlined">light_mode</span>
+        </button>
+        <button class="icon-btn" title="Google Apps" id="appsBtn">
+          <span class="material-icons-outlined">apps</span>
+        </button>
+        <div class="user-menu" id="userMenu">
+          <div class="user-avatar" id="userAvatar"></div>
+          <div class="user-dropdown hidden" id="userDropdown">
+            <div class="dropdown-header">
+              <div class="dropdown-avatar" id="dropdownAvatar"></div>
+              <div class="dropdown-info">
+                <div class="dropdown-name" id="dropdownName"></div>
+                <div class="dropdown-email" id="dropdownEmail"></div>
+              </div>
+            </div>
+            <hr>
+            <button id="logoutBtn" class="dropdown-item">
+              <span class="material-icons-outlined">logout</span> Sign Out
+            </button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <div class="main-content">
+      <!-- Sidebar -->
+      <aside class="sidebar" id="sidebar">
+        <button id="composeBtn" class="compose-btn">
+          <span class="material-icons-outlined">edit</span>
+          <span>Compose</span>
+        </button>
+        <nav class="folder-nav">
+          <button class="folder-btn active" data-folder="inbox">
+            <span class="material-icons-outlined">inbox</span>
+            <span class="folder-label">Inbox</span>
+            <span class="unread-badge" id="inboxBadge"></span>
+            <span class="threat-badge hidden" id="threatBadge" title="Threats found in inbox">⚠</span>
+          </button>
+          <button class="folder-btn" data-folder="starred">
+            <span class="material-icons-outlined">star</span>
+            <span class="folder-label">Starred</span>
+          </button>
+          <button class="folder-btn" data-folder="snoozed">
+            <span class="material-icons-outlined">schedule</span>
+            <span class="folder-label">Snoozed</span>
+          </button>
+          <button class="folder-btn" data-folder="sent">
+            <span class="material-icons-outlined">send</span>
+            <span class="folder-label">Sent</span>
+          </button>
+          <button class="folder-btn" data-folder="drafts">
+            <span class="material-icons-outlined">drafts</span>
+            <span class="folder-label">Drafts</span>
+            <span class="draft-count" id="draftBadge"></span>
+          </button>
+          <button class="folder-btn more-toggle" id="moreToggle">
+            <span class="material-icons-outlined">expand_more</span>
+            <span class="folder-label">More</span>
+          </button>
+          <div class="more-folders hidden" id="moreFolders">
+            <button class="folder-btn" data-folder="archive">
+              <span class="material-icons-outlined">archive</span>
+              <span class="folder-label">Archive</span>
+            </button>
+            <button class="folder-btn" data-folder="important">
+              <span class="material-icons-outlined">label_important</span>
+              <span class="folder-label">Important</span>
+            </button>
+            <button class="folder-btn" data-folder="spam">
+              <span class="material-icons-outlined">report</span>
+              <span class="folder-label">Spam</span>
+            </button>
+            <button class="folder-btn" data-folder="trash">
+              <span class="material-icons-outlined">delete</span>
+              <span class="folder-label">Trash</span>
+            </button>
+            <button class="folder-btn" data-folder="all">
+              <span class="material-icons-outlined">all_inbox</span>
+              <span class="folder-label">All Mail</span>
+            </button>
+          </div>
+        </nav>
+        <div class="sidebar-divider"></div>
+        <div class="labels-section">
+          <div class="labels-header">
+            <span>Labels</span>
+            <button class="icon-btn label-add" title="Create new label">
+              <span class="material-icons-outlined">add</span>
+            </button>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Email List -->
+      <div class="email-list-container" id="emailListContainer">
+        <div class="list-toolbar">
+          <div class="toolbar-left">
+            <input type="checkbox" class="list-checkbox-all" id="selectAllCheckbox" title="Select all">
+            <button class="icon-btn toolbar-icon" title="Refresh" id="refreshBtn2">
+              <span class="material-icons-outlined">refresh</span>
+            </button>
+            <button class="icon-btn toolbar-icon" title="Spam sensitivity: Normal" id="spamSensitivityBtn" aria-label="Spam sensitivity: Normal">
+              <span class="material-icons-outlined" id="spamSensitivityIcon">shield</span>
+            </button>
+            <button class="icon-btn toolbar-icon" title="More">
+              <span class="material-icons-outlined">more_vert</span>
+            </button>
+          </div>
+          <div class="toolbar-right">
+            <span class="email-count" id="emailCount"></span>
+            <button class="icon-btn toolbar-icon" title="Newer" id="newerBtn">
+              <span class="material-icons-outlined">chevron_left</span>
+            </button>
+            <button class="icon-btn toolbar-icon" title="Older" id="olderBtn">
+              <span class="material-icons-outlined">chevron_right</span>
+            </button>
+          </div>
+        </div>
+        <!-- Security Alert Bar (shown after auto-scan if threats found) -->
+        <div id="securityAlertBar" class="security-alert-bar hidden">
+          <span class="material-icons-outlined security-alert-icon">warning</span>
+          <span id="securityAlertMsg">Threats detected in inbox</span>
+          <button id="viewThreatBtn" class="view-threat-btn">View flagged &rarr;</button>
+          <button id="securityAlertDismiss" class="security-alert-dismiss" title="Dismiss">
+            <span class="material-icons-outlined">close</span>
+          </button>
+        </div>
+        <!-- Threat filter active strip -->
+        <div id="threatFilterStrip" class="threat-filter-strip hidden">
+          <span class="material-icons-outlined" style="font-size:16px">filter_list</span>
+          <span id="threatFilterCount">Showing flagged emails</span>
+          <button id="clearThreatFilter" class="clear-filter-btn">Clear filter &times;</button>
+        </div>
+        <div id="loadingSpinner" class="loading-state hidden">
+          <div class="spinner"></div>
+          <span>Loading emails...</span>
+        </div>
+        <div id="emailList" class="email-list"></div>
+        <div id="emptyState" class="empty-state hidden">
+          <span class="material-icons-outlined empty-icon">markunread_mailbox</span>
+          <p>No emails in this folder</p>
+        </div>
+      </div>
+
+      <!-- Email Viewer (hidden by default, shown when email is opened) -->
+      <div id="emailViewer" class="email-viewer hidden">
+        <div class="viewer-toolbar">
+          <div class="viewer-toolbar-left">
+            <button id="backBtn" class="toolbar-btn" title="Back to inbox">
+              <span class="material-icons-outlined">arrow_back</span>
+            </button>
+            <button id="archiveBtn" class="toolbar-btn" title="Archive">
+              <span class="material-icons-outlined">archive</span>
+            </button>
+            <button id="reportSpamBtn" class="toolbar-btn" title="Report spam">
+              <span class="material-icons-outlined">report</span>
+            </button>
+            <button id="deleteBtn" class="toolbar-btn delete-action" title="Delete">
+              <span class="material-icons-outlined">delete</span>
+            </button>
+            <span class="toolbar-divider"></span>
+            <button id="markUnreadBtn" class="toolbar-btn" title="Mark as unread">
+              <span class="material-icons-outlined">markunread</span>
+            </button>
+            <button id="snoozeBtn" class="toolbar-btn" title="Snooze">
+              <span class="material-icons-outlined">schedule</span>
+            </button>
+            <button id="moveToBtn" class="toolbar-btn" title="Move to">
+              <span class="material-icons-outlined">drive_file_move</span>
+            </button>
+            <button id="labelBtn" class="toolbar-btn" title="Labels">
+              <span class="material-icons-outlined">label</span>
+            </button>
+          </div>
+          <div class="viewer-toolbar-right">
+            <button id="replyBtn" class="toolbar-btn" title="Reply">
+              <span class="material-icons-outlined">reply</span>
+            </button>
+            <button id="forwardBtn" class="toolbar-btn" title="Forward">
+              <span class="material-icons-outlined">forward</span>
+            </button>
+            <button id="starBtn" class="toolbar-btn" title="Star">
+              <span class="material-icons-outlined">star_border</span>
+            </button>
+            <button class="toolbar-btn" title="More">
+              <span class="material-icons-outlined">more_vert</span>
+            </button>
+          </div>
+        </div>
+        <div class="viewer-content">
+          <h2 id="emailSubject" class="viewer-subject"></h2>
+          <div class="viewer-meta">
+            <div class="sender-avatar" id="senderAvatar"></div>
+            <div class="sender-info">
+              <div class="sender-name" id="emailFrom"></div>
+              <div class="sender-detail">to <span id="emailTo"></span> &middot; <span id="emailDate"></span></div>
+            </div>
+          </div>
+
+          <!-- Scam Detection Banner -->
+          <div id="scamBanner" class="scam-banner hidden">
+            <div class="scam-banner-header">
+              <div class="scam-banner-title">
+                <span class="material-icons-outlined scam-icon" id="scamIcon">shield</span>
+                <span id="scamLevel">Checking...</span>
+                <span class="scam-score-badge" id="scamScoreBadge"></span>
+              </div>
+              <button class="scam-toggle-btn" id="scamToggleBtn" title="Show details">
+                <span class="material-icons-outlined">expand_more</span>
+              </button>
+            </div>
+            <p class="scam-summary" id="scamSummary"></p>
+            <div class="scam-details hidden" id="scamDetails">
+              <div class="scam-indicators" id="scamIndicators"></div>
+              <div class="scam-recommendations" id="scamRecommendations"></div>
+            </div>
+          </div>
+
+          <div id="emailBody" class="email-body"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Compose Window (Gmail bottom-right style) -->
+  <div id="composeModal" class="compose-popup hidden">
+    <div class="compose-window">
+      <div class="compose-header">
+        <span>New Message</span>
+        <div class="compose-header-actions">
+          <button class="compose-header-btn" title="Minimize" id="minimizeComposeBtn">
+            <span class="material-icons-outlined">minimize</span>
+          </button>
+          <button class="compose-header-btn" title="Full screen" id="expandComposeBtn">
+            <span class="material-icons-outlined">open_in_full</span>
+          </button>
+          <button class="compose-header-btn" id="closeComposeBtn">
+            <span class="material-icons-outlined">close</span>
+          </button>
+        </div>
+      </div>
+      <form id="composeForm">
+        <div class="compose-field">
+          <label>To</label>
+          <input type="text" id="composeTo" autocomplete="email" placeholder="recipient@example.com" required>
+        </div>
+        <div class="compose-field">
+          <label>Subject</label>
+          <input type="text" id="composeSubject" required>
+        </div>
+        <!-- Format bar -->
+        <div id="composeFormatBar" class="compose-format-bar hidden">
+          <button type="button" id="fmtBold" class="fmt-btn" title="Bold"><b>B</b></button>
+          <button type="button" id="fmtItalic" class="fmt-btn" title="Italic"><i>I</i></button>
+          <button type="button" id="fmtUnderline" class="fmt-btn" title="Underline"><u>U</u></button>
+          <button type="button" id="fmtStrike" class="fmt-btn" title="Strikethrough"><s>S</s></button>
+          <span class="fmt-sep"></span>
+          <button type="button" id="fmtBullet" class="fmt-btn" title="Bullet point">• List</button>
+          <button type="button" id="fmtQuote" class="fmt-btn" title="Blockquote">“ Quote</button>
+        </div>
+        <!-- Link insert bar -->
+        <div id="composeLinkBar" class="compose-link-bar hidden">
+          <input type="text" id="composeLinkInput" placeholder="https://..." autocomplete="off">
+          <button type="button" id="composeLinkInsertBtn" class="compose-link-action">Insert</button>
+          <button type="button" id="composeLinkCancelBtn" class="compose-link-action compose-link-cancel">✕</button>
+        </div>
+        <textarea id="composeBody" placeholder="Write your message here..." required></textarea>
+        <!-- Attached files list -->
+        <div id="composeFilesList" class="compose-files-list hidden"></div>
+        <div class="compose-actions">
+          <button type="submit" class="send-btn">
+            <span class="material-icons-outlined">send</span> Send
+          </button>
+          <div class="compose-toolbar-icons">
+            <button type="button" id="composeFormatBtn" class="compose-tool-btn" title="Formatting">
+              <span class="material-icons-outlined">text_format</span>
+            </button>
+            <button type="button" id="composeAttachBtn" class="compose-tool-btn" title="Attach files">
+              <span class="material-icons-outlined">attach_file</span>
+            </button>
+            <button type="button" id="composeLinkBtn" class="compose-tool-btn" title="Insert link">
+              <span class="material-icons-outlined">insert_link</span>
+            </button>
+            <button type="button" id="composeEmojiBtn" class="compose-tool-btn" title="Insert emoji">
+              <span class="material-icons-outlined">mood</span>
+            </button>
+            <button type="button" id="composePhotoBtn" class="compose-tool-btn" title="Insert photo">
+              <span class="material-icons-outlined">insert_photo</span>
+            </button>
+          </div>
+          <div style="margin-left:auto;display:flex;align-items:center;gap:4px">
+            <button type="button" class="compose-tool-btn" id="draftBtn" title="More options">
+              <span class="material-icons-outlined">more_vert</span>
+            </button>
+            <button type="button" class="compose-tool-btn discard" id="cancelBtn" title="Discard">
+              <span class="material-icons-outlined">delete</span>
+            </button>
+          </div>
+        </div>
+        <!-- Emoji picker -->
+        <div id="composeEmojiPanel" class="compose-emoji-panel hidden">
+          <div class="emoji-row"><button type="button" class="emoji-btn">😀</button><button type="button" class="emoji-btn">😃</button><button type="button" class="emoji-btn">😄</button><button type="button" class="emoji-btn">😁</button><button type="button" class="emoji-btn">😆</button><button type="button" class="emoji-btn">😅</button><button type="button" class="emoji-btn">🤣</button><button type="button" class="emoji-btn">😊</button><button type="button" class="emoji-btn">😇</button><button type="button" class="emoji-btn">🙂</button></div>
+          <div class="emoji-row"><button type="button" class="emoji-btn">😉</button><button type="button" class="emoji-btn">😍</button><button type="button" class="emoji-btn">🤩</button><button type="button" class="emoji-btn">😘</button><button type="button" class="emoji-btn">😋</button><button type="button" class="emoji-btn">😛</button><button type="button" class="emoji-btn">🤔</button><button type="button" class="emoji-btn">😎</button><button type="button" class="emoji-btn">🥳</button><button type="button" class="emoji-btn">😄</button></div>
+          <div class="emoji-row"><button type="button" class="emoji-btn">😮</button><button type="button" class="emoji-btn">🥺</button><button type="button" class="emoji-btn">😢</button><button type="button" class="emoji-btn">😭</button><button type="button" class="emoji-btn">😤</button><button type="button" class="emoji-btn">😡</button><button type="button" class="emoji-btn">🤯</button><button type="button" class="emoji-btn">😴</button><button type="button" class="emoji-btn">🤐</button><button type="button" class="emoji-btn">😷</button></div>
+          <div class="emoji-row"><button type="button" class="emoji-btn">👍</button><button type="button" class="emoji-btn">👎</button><button type="button" class="emoji-btn">👋</button><button type="button" class="emoji-btn">🤝</button><button type="button" class="emoji-btn">👏</button><button type="button" class="emoji-btn">🙌</button><button type="button" class="emoji-btn">💪</button><button type="button" class="emoji-btn">🙏</button><button type="button" class="emoji-btn">✌️</button><button type="button" class="emoji-btn">🤞</button></div>
+          <div class="emoji-row"><button type="button" class="emoji-btn">❤️</button><button type="button" class="emoji-btn">🔥</button><button type="button" class="emoji-btn">⭐</button><button type="button" class="emoji-btn">🎉</button><button type="button" class="emoji-btn">🎊</button><button type="button" class="emoji-btn">💡</button><button type="button" class="emoji-btn">📧</button><button type="button" class="emoji-btn">📎</button><button type="button" class="emoji-btn">✅</button><button type="button" class="emoji-btn">❌</button></div>
+        </div>
+        <input type="file" id="composeAttachInput" multiple hidden>
+        <input type="file" id="composePhotoInput" accept="image/*" multiple hidden>
+      </form>
+    </div>
+  </div>
+
+  <!-- Hidden span for legacy JS references -->
+  <span id="userEmail" class="hidden"></span>
+
+  <script src="app.js"></script>
+</body>
+</html>
+

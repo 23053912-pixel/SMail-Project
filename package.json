@@ -1,0 +1,36 @@
+{
+  "name": "smail-project",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "node backend/server.js",
+    "dev": "node backend/server.js",
+    "start:scaled": "node backend/server-scaled.js",
+    "start:dev:scaled": "nodemon backend/server-scaled.js",
+    "docker:build": "docker build -t smail-backend:latest -f Dockerfile.backend .",
+    "docker:build:ml": "docker build -t smail-ml-api:latest -f ml-engine/core/predictive/Dockerfile ./ml-engine/core/predictive",
+    "docker:compose": "docker-compose up -d",
+    "docker:compose:down": "docker-compose down",
+    "k8s:deploy": "kubectl apply -f k8s-gcp-deployment.yaml",
+    "k8s:delete": "kubectl delete -f k8s-gcp-deployment.yaml"
+  },
+  "dependencies": {
+    "compression": "^1.8.1",
+    "connect-redis": "^7.1.0",
+    "cors": "^2.8.6",
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.3.1",
+    "express-session": "^1.19.0",
+    "google-auth-library": "^10.6.1",
+    "googleapis": "^171.4.0",
+    "jsonwebtoken": "^9.0.3",
+    "pg": "^8.10.0",
+    "rate-limit-redis": "^4.1.1",
+    "redis": "^4.6.11",
+    "sqlite3": "^6.0.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}

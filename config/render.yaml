@@ -1,0 +1,46 @@
+services:
+  - type: web
+    name: smail-backend
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: DB_HOST
+        fromService:
+          name: smail-postgres
+          property: host
+      - key: DB_USER
+        value: smail_user
+      - key: DB_PASSWORD
+        sync: false
+      - key: DB_NAME
+        value: smail_db
+      - key: JWT_SECRET
+        sync: false
+      - key: ML_API_HOST
+        value: smail-ml-api.onrender.com
+      - key: ML_API_PORT
+        value: 443
+
+  - type: web
+    name: smail-ml-api
+    env: python
+    plan: free
+    buildCommand: pip install -r ml-engine/core/predictive/requirements.txt
+    startCommand: cd ml-engine/core/predictive && gunicorn -w 4 -b 0.0.0.0:10000 predict_api:app
+    envVars:
+      - key: FLASK_ENV
+        value: production
+      - key: PORT
+        value: 10000
+
+  - type: pserv
+    name: smail-postgres
+    plan: free
+    ipAllowList: []
+    version: "15"
