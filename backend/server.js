@@ -1,22 +1,5 @@
-﻿// SQLite integration for persistent storage
-const sqlite3 = require('sqlite3').verbose();
+﻿// Email storage via Gmail API + Session cache (Stateless design for cloud deployment)
 const path = require('path');
-const fs = require('fs');
-const dataDir = path.join(__dirname, 'data');
-const dbPath = path.join(dataDir, 'database.sqlite');
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true });
-}
-// Ensure DB file exists and set permissions (read/write for owner only)
-if (!fs.existsSync(dbPath)) {
-  fs.writeFileSync(dbPath, '');
-}
-try {
-  fs.chmodSync(dbPath, 0o600);
-} catch (e) {
-  console.warn('Could not set DB file permissions:', e.message);
-}
-const db = new sqlite3.Database(dbPath);
 
 // ── Pre-warm ML model at startup for instant first prediction ────────────────
 function warmupMLModel() {
@@ -40,53 +23,6 @@ function warmupMLModel() {
 
 // Warmup after brief delay to allow ML API startup
 setTimeout(warmupMLModel, 2000);
-
-// Initialize tables if not exist
-db.serialize(() => {
-  db.run(`CREATE TABLE IF NOT EXISTS emails (
-    id TEXT PRIMARY KEY,
-    sender TEXT,
-    recipient TEXT,
-    subject TEXT,
-    body TEXT,
-    date TEXT,
-    labels TEXT,
-    read INTEGER,
-    starred INTEGER
-  )`);
-  
-  // ── Add indexes for fast queries ───────────────────────────────────────────
-  db.run(`CREATE INDEX IF NOT EXISTS idx_emails_sender ON emails(sender)`);
-  db.run(`CREATE INDEX IF NOT EXISTS idx_emails_date ON emails(date DESC)`);
-  db.run(`CREATE INDEX IF NOT EXISTS idx_emails_labels ON emails(labels)`);
-  db.run(`CREATE INDEX IF NOT EXISTS idx_emails_read ON emails(read)`);
-  db.run(`CREATE INDEX IF NOT EXISTS idx_emails_starred ON emails(starred)`);
-  
-  db.run(`CREATE TABLE IF NOT EXISTS spam_results (
-    email_id TEXT PRIMARY KEY,
-    is_spam INTEGER,
-    spam_score REAL,
-    ml_prediction TEXT,
-    ml_probability REAL,
-    scanned_at TEXT,
-    FOREIGN KEY(email_id) REFERENCES emails(id)
-  )`);
-  
-  // ── Add indexes for spam_results queries ───────────────────────────────────
-  db.run(`CREATE INDEX IF NOT EXISTS idx_spam_results_is_spam ON spam_results(is_spam)`);
-  db.run(`CREATE INDEX IF NOT EXISTS idx_spam_results_score ON spam_results(spam_score DESC)`);
-  db.run(`CREATE INDEX IF NOT EXISTS idx_spam_results_scanned ON spam_results(scanned_at DESC)`);
-  
-  // ── Enable WAL mode for concurrent reads (faster in multi-user scenarios) ──
-  db.run(`PRAGMA journal_mode=WAL`);
-  // ── Enable synchronous=NORMAL for better performance (safer than OFF) ──────
-  db.run(`PRAGMA synchronous=NORMAL`);
-  // ── Increase cache size to 10MB for fewer disk accesses ────────────────────
-  db.run(`PRAGMA cache_size=10000`);
-});
-
-// Export db for use in routes
-module.exports.db = db;
 'use strict';
 require('dotenv').config({ path: require('path').join(__dirname, '.env') });
 

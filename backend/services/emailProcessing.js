@@ -17,10 +17,9 @@ const spamDetection = require('./spamDetection');
  * @param {string} query - Gmail query string
  * @param {number} maxResults - Max emails to fetch
  * @param {string} userEmail - User's email address
- * @param {Object} db - Database connection
  * @returns {Promise<Object>} Processed emails with categories and spam predictions
  */
-async function processEmails(gmail, query, maxResults, userEmail, db) {
+async function processEmails(gmail, query, maxResults, userEmail) {
   try {
     // Step 1: Fetch emails from Gmail
     console.log('📬 Fetching emails...');
@@ -51,13 +50,6 @@ async function processEmails(gmail, query, maxResults, userEmail, db) {
     }));
     console.log(`✓ Spam detection complete`);
 
-    // Step 4: Save results to database (if db provided)
-    if (db) {
-      console.log('💾 Saving to database...');
-      await saveProcessedEmailsToDB(db, emailsWithSpamScores);
-      console.log(`✓ Saved ${emailsWithSpamScores.length} emails to database`);
-    }
-
     return {
       success: true,
       emails: emailsWithSpamScores,
@@ -74,42 +66,6 @@ async function processEmails(gmail, query, maxResults, userEmail, db) {
   }
 }
 
-/**
- * Save processed emails to database
- * @param {Object} db - Database connection
- * @param {Array} emails - Processed emails
- */
-async function saveProcessedEmailsToDB(db, emails) {
-  return new Promise((resolve, reject) => {
-    db.serialize(() => {
-      const stmt = db.prepare(`
-        INSERT OR REPLACE INTO emails (id, sender, recipient, subject, body, date, labels, read, starred)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `);
-
-      emails.forEach(email => {
-        stmt.run(
-          email.id,
-          email.from,
-          email.to,
-          email.subject,
-          email.body,
-          email.date.toISOString(),
-          [...email.labels.split(','), ...email.categories].join(','),
-          email.read ? 1 : 0,
-          email.starred ? 1 : 0
-        );
-      });
-
-      stmt.finalize((err) => {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
-  });
-}
-
 module.exports = {
-  processEmails,
-  saveProcessedEmailsToDB
+  processEmails
 };
