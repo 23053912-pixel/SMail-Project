@@ -694,7 +694,7 @@ function renderEmailList() {
   let source = emails;
   if (threatFilterActive) {
     source = emails.filter(e => {
-      const r = scamCache[e.id];
+      const r = scamCacheGet(e.id);
       return r && r.level !== 'safe';
     });
     const strip = document.getElementById('threatFilterStrip');
@@ -911,7 +911,40 @@ async function openEmail(id) {
 }
 
 // ============ Scam Detection ============
+// LRU-like cache with TTL (5 min) and max size (500 entries) to prevent memory leaks
 const scamCache = {};
+const scamCacheTimestamps = {};
+const SCAM_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const SCAM_CACHE_MAX = 500;
+
+function scamCacheSet(key, value) {
+  // Evict oldest if at capacity
+  const keys = Object.keys(scamCacheTimestamps);
+  if (keys.length >= SCAM_CACHE_MAX) {
+    let oldestKey = keys[0];
+    let oldestTime = scamCacheTimestamps[keys[0]];
+    for (const k of keys) {
+      if (scamCacheTimestamps[k] < oldestTime) {
+        oldestTime = scamCacheTimestamps[k];
+        oldestKey = k;
+      }
+    }
+    delete scamCache[oldestKey];
+    delete scamCacheTimestamps[oldestKey];
+  }
+  scamCache[key] = value;
+  scamCacheTimestamps[key] = Date.now();
+}
+
+function scamCacheGet(key) {
+  const ts = scamCacheTimestamps[key];
+  if (!ts || (Date.now() - ts) > SCAM_CACHE_TTL) {
+    delete scamCache[key];
+    delete scamCacheTimestamps[key];
+    return undefined;
+  }
+  return scamCache[key];
+}
 
 async function scanEmailForScam(emailId) {
   const banner = document.getElementById('scamBanner');
@@ -931,7 +964,7 @@ async function scanEmailForScam(emailId) {
 
   try {
     // Check cache first
-    let result = scamCache[emailId];
+    let result = scamCacheGet(emailId);
     if (!result) {
       const jwtToken = localStorage.getItem('jwtToken');
       const headers = {};
@@ -939,7 +972,7 @@ async function scanEmailForScam(emailId) {
 
       const res = await fetch(`/api/email/${emailId}/scan`, { headers });
       result = await res.json();
-      scamCache[emailId] = result;
+      scamCacheSet(emailId, result);
     }
 
     // Only show banner if there are indicators
@@ -1038,8 +1071,8 @@ async function scanVisibleEmails(emails, { limit = 20, concurrency = 2, onComple
   async function worker() {
     while (idx < toScan.length) {
       const email = toScan[idx++];
-      if (scamCache[email.id]) {
-        const r = scamCache[email.id];
+      if (scamCacheGet(email.id)) {
+        const r = scamCacheGet(email.id);
         if (r.level !== 'safe') threats++;
         if (r.level === 'critical' || r.level === 'high') critical++;
         updateListBadge(email.id, r);
@@ -1048,7 +1081,7 @@ async function scanVisibleEmails(emails, { limit = 20, concurrency = 2, onComple
       try {
         const res = await fetch(`/api/email/${email.id}/scan`, { headers });
         const result = await res.json();
-        scamCache[email.id] = result;
+        scamCacheSet(email.id, result);
         if (result.level !== 'safe') threats++;
         if (result.level === 'critical' || result.level === 'high') critical++;
         updateListBadge(email.id, result);

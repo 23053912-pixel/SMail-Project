@@ -9,7 +9,7 @@ const jwt              = require('jsonwebtoken');
 
 const { BASE_URL }                                    = require('../config');
 const { sessions, upsertSession, getAllEmailsDeduped } = require('../utils/session');
-const { fetchGmailEmails }                             = require('../services/gmail');
+const { fetchGmailEmails }                             = require('../services/emailFetching');
 
 const router = express.Router();
 
@@ -28,6 +28,14 @@ function consumeOAuthState(state) {
   oauthStates.delete(state);
   return Date.now() < expiry;
 }
+
+// ── Purge expired OAuth states every 5 minutes ──────────────────────────────
+setInterval(() => {
+  const now = Date.now();
+  for (const [state, expiry] of oauthStates) {
+    if (expiry < now) oauthStates.delete(state);
+  }
+}, 5 * 60 * 1000);
 
 // ── One-time JWT exchange codes (never put the JWT in the URL) ────────────────
 const authExchangeCodes = new Map();

@@ -214,10 +214,115 @@ async function fetchDraftEmails(gmail, userEmail) {
   }
 }
 
+// ── Full initial Gmail fetch for all folders ─────────────────────────────────
+async function fetchGmailEmails(session, tokensOrAccessToken) {
+  const { OAuth2Client } = require('google-auth-library');
+  const { google } = require('googleapis');
+  const { BASE_URL } = require('../config');
+  const { isGoogleVerifiedSpam } = require('../utils/session');
+  const https = require('https');
+
+  const userEmail = session.user.email;
+  try {
+    const accessToken = typeof tokensOrAccessToken === 'object'
+      ? tokensOrAccessToken.access_token
+      : tokensOrAccessToken;
+
+    if (!accessToken) { console.error('No access token available'); return; }
+
+    const oauth2Client = new OAuth2Client(
+      process.env.GOOGLE_CLIENT_ID,
+      process.env.GOOGLE_CLIENT_SECRET,
+      `${BASE_URL}/callback`
+    );
+    if (typeof tokensOrAccessToken === 'object') {
+      oauth2Client.setCredentials(tokensOrAccessToken);
+    } else {
+      oauth2Client.setCredentials({ access_token: accessToken });
+    }
+    oauth2Client.requestMetadata = async () => ({ headers: { Authorization: `Bearer ${accessToken}` } });
+
+    const gmail = google.gmail({
+      version: 'v1',
+      auth:    oauth2Client,
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+
+    // Quick auth test
+    try {
+      const profile = await gmail.users.getProfile({ userId: 'me' });
+      console.log(`Gmail auth OK for ${userEmail} - total: ${profile.data.messagesTotal}`);
+    } catch (authErr) {
+      console.error('Gmail auth test failed:', authErr.message);
+      const testResult = await new Promise((resolve, reject) => {
+        const req = https.request({
+          hostname: 'gmail.googleapis.com',
+          path:     '/gmail/v1/users/me/profile',
+          method:   'GET',
+          headers:  { Authorization: `Bearer ${accessToken}` }
+        }, (res) => {
+          let data = '';
+          res.on('data', chunk => data += chunk);
+          res.on('end', () => resolve({ status: res.statusCode }));
+        });
+        req.on('error', reject);
+        req.end();
+      });
+      if (testResult.status !== 200) throw authErr;
+    }
+
+    console.log(`Fetching all Gmail emails for ${userEmail}...`);
+
+    const fetchAllEmails = Promise.all([
+      fetchGmailMessageList(gmail, 'in:inbox -in:trash -in:spam', 50, userEmail),
+      fetchGmailMessageList(gmail, 'in:sent',                     30, userEmail),
+      fetchGmailMessageList(gmail, 'in:trash',                    20, userEmail),
+      fetchGmailMessageList(gmail, 'in:snoozed',                  20, userEmail),
+      fetchGmailMessageList(gmail, 'in:spam',                     20, userEmail)
+    ]);
+
+    // Overall fetch timeout: 90 seconds
+    const [inboxResult, sentResult, trashResult, snoozedResult, spamResult] = await Promise.race([
+      fetchAllEmails,
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Overall Gmail fetch timeout')), 90000))
+    ]);
+    const draftResults = await fetchDraftEmails(gmail, userEmail, 20);
+
+    const byDate = (a, b) => new Date(b.date) - new Date(a.date);
+    session.userEmails    = inboxResult.messages.sort(byDate);
+    session.sentEmails    = sentResult.messages.sort(byDate);
+    session.draftEmails   = draftResults.sort(byDate);
+    session.trashEmails   = trashResult.messages.sort(byDate);
+    session.snoozedEmails = snoozedResult.messages.sort(byDate);
+    session.spamEmails    = spamResult.messages.filter(isGoogleVerifiedSpam).sort(byDate);
+
+    session.nextPageTokens = {
+      inbox:   inboxResult.nextPageToken   || null,
+      sent:    sentResult.nextPageToken    || null,
+      trash:   trashResult.nextPageToken   || null,
+      snoozed: snoozedResult.nextPageToken || null,
+      spam:    spamResult.nextPageToken    || null
+    };
+
+    console.log(
+      `Loaded emails for ${userEmail}:`,
+      `inbox=${session.userEmails.length}`,
+      `sent=${session.sentEmails.length}`,
+      `drafts=${session.draftEmails.length}`,
+      `trash=${session.trashEmails.length}`
+    );
+  } catch (err) {
+    console.error(`Gmail API error for ${userEmail}:`, err.message);
+    session.userEmails = session.sentEmails = session.draftEmails =
+      session.trashEmails = session.snoozedEmails = session.spamEmails = [];
+  }
+}
+
 module.exports = {
   createGmailClient,
   fetchGmailMessageList,
   fetchDraftEmails,
+  fetchGmailEmails,
   extractBody,
   stripHtml,
   withRetry

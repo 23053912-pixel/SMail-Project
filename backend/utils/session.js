@@ -33,12 +33,18 @@ function upsertSession(user) {
 }
 
 // Purge sessions idle for more than 8 hours (prevents memory leak)
-setInterval(() => {
+function purgeStaleSessions() {
   const cutoff = Date.now() - 8 * 60 * 60 * 1000;
   for (const [id, s] of sessions) {
     if (s.lastActive < cutoff) sessions.delete(id);
   }
-}, 60 * 60 * 1000);
+}
+
+// Run on startup to clean up any leftover state
+purgeStaleSessions();
+
+// Then run every hour
+setInterval(purgeStaleSessions, 60 * 60 * 1000);
 
 function getAllEmailsDeduped(session) {
   const merged = [

@@ -288,6 +288,8 @@ router.post('/send', async (req, res) => {
 
   try {
     // Build email in RFC 2822 format
+    // Sanitize body to prevent header injection (strip \r and \n from body content)
+    const safeBody = String(body).replace(/\r/g, '').replace(/\n/g, '<br>');
     const raw = [
       `From: ${session.user.email}`,
       `To: ${to}`,
@@ -295,7 +297,7 @@ router.post('/send', async (req, res) => {
       'Content-Type: text/html; charset=utf-8',
       'MIME-Version: 1.0',
       '',
-      body
+      safeBody
     ].join('\r\n');
 
     // Encode to base64url
