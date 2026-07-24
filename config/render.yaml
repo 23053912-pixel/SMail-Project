@@ -3,7 +3,7 @@ services:
     name: smail-backend
     env: node
     plan: free
-    buildCommand: npm ci
+    buildCommand: npm install
     startCommand: npm start
     envVars:
       - key: NODE_ENV

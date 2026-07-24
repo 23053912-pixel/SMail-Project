@@ -4,10 +4,6 @@
   "description": "SMail backend — run from project root with: npm start",
   "main": "server.js",
   "private": true,
-  "note": "Dependencies are managed by the root package.json. Run 'npm install' and 'npm start' from the project root, not this directory.",
-  "engines": {
-    "node": ">=18.0.0"
-  },
   "dependencies": {
     "compression": "^1.8.1",
     "cors": "^2.8.6",
