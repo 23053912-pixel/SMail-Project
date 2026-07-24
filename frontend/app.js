@@ -944,7 +944,6 @@ async function openEmail(id) {
     }
 
     // Body — render HTML in a sandboxed iframe to prevent XSS
-    const emailBodyEl = document.getElementById('emailBody');
     emailBodyEl.innerHTML = '';
     if (currentEmail.bodyHtml) {
       const iframe = document.createElement('iframe');
