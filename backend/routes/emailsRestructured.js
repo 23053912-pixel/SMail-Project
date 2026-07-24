@@ -408,6 +408,14 @@ router.post('/send', upload.array('attachments', 10), async (req, res) => {
   }
 });
 
+// ── GET /api/drafts ─────────────────────────────────────────────────────────
+// List all drafts for the current session
+router.get('/drafts', (req, res) => {
+  const session = requireAuth(req, res);
+  if (!session) return;
+  res.json(session.draftEmails || []);
+});
+
 // ── POST /api/draft ───────────────────────────────────────────────────────────
 // Save a draft email
 router.post('/draft', (req, res) => {

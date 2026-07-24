@@ -8,6 +8,7 @@ let hasMoreOnServer = false; // true when Gmail has more pages beyond what's loa
 let currentPage = 0;        // tracked at module level so folder changes reset it correctly
 let threatFilterActive = false; // true when showing only flagged/threat emails
 let autoSpamSweepInProgress = false;
+let selectedEmailIndex = -1; // for keyboard navigation
 let lastAutoSpamSweepAt = 0;
 let autoSpamSensitivity = localStorage.getItem('autoSpamSensitivity') || 'normal';
 let autoRefreshTimer = null; // Timer for automatic inbox refresh
@@ -395,6 +396,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   initComposeToolbar();
   setupDeleteModal();
+  setupKeyboardNav();
 
   // ── Auto-refresh inbox when user returns to browser tab ────────────────────
   document.addEventListener('visibilitychange', () => {
@@ -533,12 +535,24 @@ function showMainApp() {
   // Set user info
   if (userEmail) userEmail.textContent = currentUser.email;
   const initial = getInitial(currentUser.name || currentUser.email);
-  if (userAvatar) userAvatar.textContent = initial;
+
+  // Render profile picture if available, otherwise show initial
+  if (currentUser.picture) {
+    userAvatar.innerHTML = `<img src="${currentUser.picture}" alt="${currentUser.name || 'User'}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">`;
+  } else {
+    userAvatar.textContent = initial;
+  }
 
   const dropdownAvatar = document.getElementById('dropdownAvatar');
   const dropdownName = document.getElementById('dropdownName');
   const dropdownEmail = document.getElementById('dropdownEmail');
-  if (dropdownAvatar) dropdownAvatar.textContent = initial;
+  if (dropdownAvatar) {
+    if (currentUser.picture) {
+      dropdownAvatar.innerHTML = `<img src="${currentUser.picture}" alt="${currentUser.name || 'User'}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">`;
+    } else {
+      dropdownAvatar.textContent = initial;
+    }
+  }
   if (dropdownName) dropdownName.textContent = currentUser.name || '';
   if (dropdownEmail) dropdownEmail.textContent = currentUser.email || '';
 
@@ -751,7 +765,7 @@ function renderEmailList() {
     const snippet = stripHtml(email.preview || email.snippet || (email.body ? email.body.substring(0, 120) : ''));
 
     div.innerHTML = `
-      <input type="checkbox" class="email-item-checkbox" onclick="event.stopPropagation()">
+      <input type="checkbox" class="email-item-checkbox" onclick="event.stopPropagation()" aria-label="Select email from ${fromName}">
       <span class="material-icons-outlined email-item-star${email.starred ? ' starred' : ''}" data-id="${escHtml(email.id)}">${email.starred ? 'star' : 'star_border'}</span>
       <span class="email-item-from">${escHtml(fromName)}</span>
       <div class="email-item-content">
@@ -867,8 +881,9 @@ function renderEmailList() {
           emails = [...emails, ...newEmails];
           displayedCount += newEmails.length || 25;
           renderEmailList();
-          updateEmailCount();
-          updateUnreadCount();
+    updateEmailCount();
+    updateUnreadCount();
+    updateDraftCount();
         } catch (err) {
           showToast('Failed to load more emails', 'error');
           loadMoreBtn.textContent = 'Load more from Gmail...';
@@ -887,6 +902,11 @@ function renderEmailList() {
 // ============ Open Email ============
 async function openEmail(id) {
   try {
+    // Show loading state
+    const emailBodyEl = document.getElementById('emailBody');
+    emailBodyEl.innerHTML = '<div class="email-loading"><div class="spinner"></div><p>Loading email...</p></div>';
+    showEmailViewer();
+
     const jwtToken = localStorage.getItem('jwtToken');
     const headers = {};
     if (jwtToken) headers['Authorization'] = `Bearer ${jwtToken}`;
@@ -937,7 +957,6 @@ async function openEmail(id) {
       starIcon.style.color = currentEmail.starred ? '#f4b400' : '';
     }
 
-    showEmailViewer();
     renderEmailList();
 
     // Run scam detection in background
@@ -1430,6 +1449,7 @@ async function handleSaveDraft() {
     if (response.ok) {
       showToast('Draft saved');
       closeCompose();
+      updateDraftCount();
       if (currentFolder === 'drafts') loadEmails();
     }
   } catch (error) {
@@ -1495,6 +1515,54 @@ async function handleSearch() {
   }
 }
 
+// ============ Keyboard Navigation ============
+function setupKeyboardNav() {
+  document.addEventListener('keydown', (e) => {
+    // Don't handle if user is typing in an input or compose
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) return;
+    if (!document.getElementById('loginScreen').classList.contains('hidden')) return;
+
+    const items = document.querySelectorAll('.email-item');
+    if (!items.length) return;
+
+    if (e.key === 'ArrowDown' || e.key === 'j') {
+      e.preventDefault();
+      selectedEmailIndex = Math.min(selectedEmailIndex + 1, items.length - 1);
+      highlightSelectedItem(items);
+    } else if (e.key === 'ArrowUp' || e.key === 'k') {
+      e.preventDefault();
+      selectedEmailIndex = Math.max(selectedEmailIndex - 1, 0);
+      highlightSelectedItem(items);
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (selectedEmailIndex >= 0 && selectedEmailIndex < emails.length) {
+        openEmail(emails[selectedEmailIndex].id);
+      }
+    } else if (e.key === 'Escape') {
+      if (!emailViewer.classList.contains('hidden')) {
+        backToList();
+        selectedEmailIndex = -1;
+      }
+    } else if (e.key === 'x') {
+      // Toggle select checkbox
+      if (selectedEmailIndex >= 0 && selectedEmailIndex < emails.length) {
+        const cb = items[selectedEmailIndex].querySelector('.email-item-checkbox');
+        if (cb) cb.click();
+      }
+    }
+  });
+}
+
+function highlightSelectedItem(items) {
+  items.forEach((item, i) => {
+    item.classList.toggle('selected', i === selectedEmailIndex);
+  });
+  // Scroll into view
+  if (selectedEmailIndex >= 0 && items[selectedEmailIndex]) {
+    items[selectedEmailIndex].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+}
+
 // ============ Unread Count ============
 function updateUnreadCount() {
   const unread = emails.filter(e => e.unread || e.read === false).length;
@@ -1510,6 +1578,20 @@ function updateEmailCount() {
     const total = emails.length;
     countEl.textContent = total > 0 ? `1–${Math.min(displayedCount, total)} of ${total}` : '';
   }
+}
+
+async function updateDraftCount() {
+  try {
+    const jwtToken = localStorage.getItem('jwtToken');
+    const headers = {};
+    if (jwtToken) headers['Authorization'] = `Bearer ${jwtToken}`;
+    const res = await fetch('/api/drafts', { headers });
+    if (res.ok) {
+      const drafts = await res.json();
+      const badge = document.getElementById('draftBadge');
+      if (badge) badge.textContent = drafts.length > 0 ? drafts.length : '';
+    }
+  } catch { /* ignore */ }
 }
 
 // ============ Format Date (Gmail-style) ============
