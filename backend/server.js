@@ -67,7 +67,7 @@ app.use((req, res, next) => {
       "frame-src 'self'",
       "object-src 'none'",
       "base-uri 'self'",
-      "form-action 'self'",
+      "form-action 'self' https://accounts.google.com",
     ].join('; ')
   );
   next();

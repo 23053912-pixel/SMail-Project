@@ -446,6 +446,8 @@ function checkOAuthCallback() {
   const authCode = params.get('auth');   // one-time exchange code
   const errorMsg = params.get('error');
 
+  console.log('[SMail] checkOAuthCallback:', { authCode: authCode ? authCode.substring(0, 10) + '...' : null, errorMsg });
+
   if (errorMsg) {
     window.history.replaceState({}, document.title, '/');
     showLoginMessage('Google Sign-In error: ' + errorMsg, 'error');
@@ -456,13 +458,18 @@ function checkOAuthCallback() {
     // Clear the code from the URL immediately so it never lingers in browser history
     window.history.replaceState({}, document.title, '/');
     // Exchange the one-time code for the JWT (token never travels in the URL)
+    console.log('[SMail] Exchanging auth code for JWT...');
     fetch('/api/auth/exchange', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ code: authCode })
     })
-      .then(r => r.json())
+      .then(r => {
+        console.log('[SMail] Exchange response status:', r.status);
+        return r.json();
+      })
       .then(data => {
+        console.log('[SMail] Exchange response:', { hasToken: !!data.token, hasUser: !!data.user, emailCount: data.emailCount });
         if (!data.token || !data.user) throw new Error('Invalid exchange response');
         const safeUser = { id: data.user.id, email: data.user.email, name: data.user.name, picture: data.user.picture, provider: data.user.provider };
         currentUser = safeUser;
@@ -473,7 +480,7 @@ function checkOAuthCallback() {
         showToast(`Welcome, ${safeUser.name}! Loaded ${data.emailCount || '?'} emails`);
       })
       .catch(e => {
-        console.error('Error processing OAuth callback:', e);
+        console.error('[SMail] Error processing OAuth callback:', e);
         showLoginMessage('Sign-in failed. Please try again.', 'error');
       });
   }
@@ -481,16 +488,21 @@ function checkOAuthCallback() {
 
 async function handleGoogleSignIn() {
   try {
+    console.log('[SMail] Google Sign-In: fetching OAuth URL...');
     showLoginMessage('Redirecting to Google Sign-In...', 'info');
     const response = await fetch('/api/auth/google-url');
+    console.log('[SMail] Google Sign-In: response status', response.status);
     if (!response.ok) throw new Error(`Failed to get sign-in URL (${response.status})`);
     const data = await response.json();
+    console.log('[SMail] Google Sign-In: received data', { hasUrl: !!data.url, demo: data.demo });
     if (!data.url) {
       showLoginMessage('Google Sign-In not configured: ' + (data.error || 'No URL'), 'error');
       return;
     }
+    console.log('[SMail] Google Sign-In: redirecting to', data.url.substring(0, 80) + '...');
     window.location.href = data.url;
   } catch (error) {
+    console.error('[SMail] Google Sign-In error:', error);
     showLoginMessage('Sign-in error: ' + error.message, 'error');
   }
 }

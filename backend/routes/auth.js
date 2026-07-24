@@ -70,7 +70,11 @@ router.post('/exchange', (req, res) => {
 // ── GET /api/auth/google-url ──────────────────────────────────────────────────
 router.get('/google-url', (req, res) => {
   try {
-    if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
+    const hasClientId = !!process.env.GOOGLE_CLIENT_ID;
+    const hasClientSecret = !!process.env.GOOGLE_CLIENT_SECRET;
+    console.log(`[Auth] /google-url called — CLIENT_ID: ${hasClientId}, CLIENT_SECRET: ${hasClientSecret}`);
+    if (!hasClientId || !hasClientSecret) {
+      console.log('[Auth] Google OAuth not configured, returning demo URL');
       return res.json({ url: `${BASE_URL}/callback?code=demo_code&demo=true`, demo: true });
     }
     const url = newGoogleClient().generateAuthUrl({
@@ -85,6 +89,7 @@ router.get('/google-url', (req, res) => {
         'openid'
       ]
     });
+    console.log('[Auth] Generated Google OAuth URL:', url.substring(0, 80) + '...');
     res.json({ url });
   } catch (err) {
     console.error('OAuth URL error:', err.message);
@@ -149,6 +154,8 @@ const callbackHandler = async (req, res) => {
   const { code, error, state, demo } = req.query;
   const isDemo = demo === 'true';
 
+  console.log(`[Auth] /callback called — code: ${code ? code.substring(0, 10) + '...' : 'none'}, error: ${error || 'none'}, isDemo: ${isDemo}`);
+
   if (error && !isDemo) {
     console.error('Google OAuth error:', error);
     return res.redirect('/?error=Sign-in+failed');
@@ -166,6 +173,7 @@ const callbackHandler = async (req, res) => {
     let googleId, email, name, picture, accessToken, fullTokens;
 
     if (isDemo || code === 'demo_code') {
+      console.log('[Auth] Demo mode — using fake credentials');
       googleId    = 'google_demo_123456789';
       email       = 'googledemo@gmail.com';
       name        = 'Google Demo User';
@@ -173,10 +181,12 @@ const callbackHandler = async (req, res) => {
       accessToken = 'demo_access_token_' + Date.now();
     } else {
       const client     = newGoogleClient();
+      console.log('[Auth] Exchanging code for tokens...');
       const { tokens } = await client.getToken(code);
       fullTokens       = tokens;
       accessToken      = tokens.access_token;
       if (!accessToken) throw new Error('No access token received from Google');
+      console.log('[Auth] Got access token, fetching user profile...');
 
       const tmpClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID, process.env.GOOGLE_CLIENT_SECRET);
       tmpClient.setCredentials(tokens);
@@ -218,6 +228,7 @@ const callbackHandler = async (req, res) => {
     const session  = upsertSession(userObj);
 
     if (!isDemo && code !== 'demo_code') {
+      console.log('[Auth] Fetching Gmail emails...');
       await fetchGmailEmails(session, fullTokens || accessToken);
     }
 
@@ -229,6 +240,7 @@ const callbackHandler = async (req, res) => {
     // (browser history, server logs, and Referer headers won't capture the token)
     const exchangeCode = crypto.randomBytes(32).toString('hex');
     authExchangeCodes.set(exchangeCode, { token, user: safeUser, emailCount: total, expiry: Date.now() + 2 * 60 * 1000 });
+    console.log(`[Auth] Redirecting to /?auth=${exchangeCode.substring(0, 10)}... (${total} emails)`);
     res.redirect(`/?auth=${exchangeCode}`);
   } catch (err) {
     console.error('OAuth Callback Error:', err.message);
