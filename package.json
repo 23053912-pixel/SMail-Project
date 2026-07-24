@@ -8,8 +8,7 @@
   "scripts": {
     "start": "node backend/server.js",
     "dev": "node backend/server.js",
-    "start:scaled": "node backend/server-scaled.js",
-    "start:dev:scaled": "nodemon backend/server-scaled.js",
+    "test": "node --test backend/__tests__/",
     "docker:build": "docker build -t smail-backend:latest -f Dockerfile.backend .",
     "docker:build:ml": "docker build -t smail-ml-api:latest -f ml-engine/core/predictive/Dockerfile ./ml-engine/core/predictive",
     "docker:compose": "docker-compose up -d",

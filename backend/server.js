@@ -62,7 +62,14 @@ app.use(cors({
 
 // ── Body parser + static files ────────────────────────────────────────────────
 app.use(express.json({ limit: '256kb' }));
-app.use(express.static(path.join(__dirname, '../frontend')));
+app.use(express.static(path.join(__dirname, '../frontend'), {
+  maxAge: '1h',
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.html')) {
+      res.setHeader('Cache-Control', 'no-cache');
+    }
+  }
+}));
 
 // ── Session middleware ────────────────────────────────────────────────────────
 // Store user sessions with email cache across requests
