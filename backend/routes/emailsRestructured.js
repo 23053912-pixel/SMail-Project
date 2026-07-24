@@ -10,7 +10,7 @@ const express = require('express');
 const https = require('https');
 const multer = require('multer');
 const { requireAuth } = require('../middleware/auth');
-const { getCachedFolder, getAllEmailsDeduped } = require('../utils/session');
+const { getCachedFolder, getAllEmailsDeduped, markEmailsDirty } = require('../utils/session');
 const emailFetching = require('../services/emailFetching');
 const emailCategorization = require('../services/emailCategorization');
 const spamDetection = require('../services/spamDetection');
@@ -30,6 +30,13 @@ function escapeHtmlEntities(str) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+function sanitizeFilename(str) {
+  return String(str || '')
+    .replace(/[\r\n]/g, '')
+    .replace(/"/g, '_')
+    .trim() || 'attachment';
 }
 
 const VALID_FOLDERS = new Set(['inbox', 'sent', 'drafts', 'trash', 'snoozed', 'spam', 'starred', 'important', 'all', 'archive']);
@@ -169,6 +176,7 @@ router.get('/emails/:folder', async (req, res) => {
 
     const key = SESSION_KEY_MAP[folder];
     if (key) session[key] = emails;
+    markEmailsDirty(session);
     
     // Track when cache was refreshed for TTL checking
     session.lastEmailRefresh = session.lastEmailRefresh || {};
@@ -217,6 +225,7 @@ router.get('/emails/:folder/more', async (req, res) => {
     if (key && Array.isArray(session[key])) {
       session[key] = [...session[key], ...result.messages];
     }
+    markEmailsDirty(session);
 
     res.json({ emails: result.messages, hasMore: !!result.nextPageToken });
   } catch (err) {
@@ -327,10 +336,11 @@ router.post('/send', upload.array('attachments', 10), async (req, res) => {
       parts.push('');
       parts.push(safeBody);
       for (const file of files) {
+        const safeName = sanitizeFilename(file.originalname);
         parts.push(`--${boundary}`);
-        parts.push(`Content-Type: ${file.mimetype}; name="${file.originalname}"`);
+        parts.push(`Content-Type: ${file.mimetype}; name="${safeName}"`);
         parts.push('Content-Transfer-Encoding: base64');
-        parts.push(`Content-Disposition: attachment; filename="${file.originalname}"`);
+        parts.push(`Content-Disposition: attachment; filename="${safeName}"`);
         parts.push('');
         parts.push(file.buffer.toString('base64'));
       }
@@ -372,7 +382,7 @@ router.post('/send', upload.array('attachments', 10), async (req, res) => {
 
       req.on('error', reject);
       req.setTimeout(15000, () => {
-        req.abort();
+        req.destroy();
         reject(new Error('Send request timeout'));
       });
 
@@ -396,6 +406,7 @@ router.post('/send', upload.array('attachments', 10), async (req, res) => {
       if (session.sentEmails) {
         session.sentEmails.unshift(newEmail);
       }
+      markEmailsDirty(session);
 
       res.json({ success: true, message: 'Email sent successfully', email: newEmail });
     } else {
@@ -450,6 +461,7 @@ router.post('/draft', (req, res) => {
     } else if (session.draftEmails) {
       session.draftEmails.push(draft);
     }
+    markEmailsDirty(session);
 
     res.json({ success: true, message: 'Draft saved', draft });
   } catch (err) {
@@ -657,31 +669,37 @@ router.post('/emails/inbox/auto-spam-scan', async (req, res) => {
     const inbox = session.userEmails || [];
     const movedIds = [];
 
+    // First pass: fast checks (Google labels + keyword detection) — no ML calls
+    const needsML = [];
     for (const email of inbox) {
-      // FIRST: Check if Google already marked as spam  (most reliable)
       const isGoogleSpam = email.inSpamFolder || (email.labels && email.labels.includes('SPAM'));
       if (isGoogleSpam) {
         movedIds.push(email.id);
         continue;
       }
-
-      // SECOND: Use keyword-based detection (fast, no ML latency)
       const keywordResult = emailSpamKeywordDetector.detectSpam(email.subject || '', email.body || '');
       if (keywordResult.level !== 'safe') {
         movedIds.push(email.id);
         continue;
       }
+      needsML.push(email);
+    }
 
-      // THIRD: Use ML model for additional detection
-      const emailText = `${email.subject || ''} ${email.body || ''}`;
-      try {
-        const prediction = await spamDetection.predictSpam(emailText);
-        if (prediction.isSpam && prediction.probability > threshold) {
-          movedIds.push(email.id);
+    // Second pass: ML predictions in parallel (5 at a time to avoid ML API overload)
+    const ML_CONCURRENCY = 5;
+    for (let i = 0; i < needsML.length; i += ML_CONCURRENCY) {
+      const batch = needsML.slice(i, i + ML_CONCURRENCY);
+      const results = await Promise.allSettled(
+        batch.map(email => {
+          const emailText = `${email.subject || ''} ${email.body || ''}`;
+          return spamDetection.predictSpam(emailText);
+        })
+      );
+      for (let j = 0; j < results.length; j++) {
+        const result = results[j];
+        if (result.status === 'fulfilled' && result.value.isSpam && result.value.probability > threshold) {
+          movedIds.push(batch[j].id);
         }
-      } catch (err) {
-        // Silently skip ML prediction if API fails
-        console.warn(`ML prediction failed for email ${email.id}:`, err.message);
       }
     }
 
@@ -690,6 +708,7 @@ router.post('/emails/inbox/auto-spam-scan', async (req, res) => {
     session.userEmails = (session.userEmails || []).filter(e => !movedIds.includes(e.id));
     const movedEmails = inbox.filter(e => movedIds.includes(e.id));
     session.spamEmails.unshift(...movedEmails);
+    markEmailsDirty(session);
 
     res.json({
       success: true,
@@ -724,6 +743,7 @@ router.put('/email/:id/star', (req, res) => {
         const email = arr.find(e => e.id === id);
         if (email) {
           email.starred = !email.starred;
+          markEmailsDirty(session);
           return res.json({ starred: email.starred });
         }
       }
@@ -759,6 +779,7 @@ router.put('/email/:id/archive', (req, res) => {
           const email = arr.splice(idx, 1)[0];
           if (!session.archivedEmails) session.archivedEmails = [];
           session.archivedEmails.unshift(email);
+          markEmailsDirty(session);
           return res.json({ archived: true });
         }
       }
@@ -794,6 +815,7 @@ router.put('/email/:id/spam', (req, res) => {
           const email = arr.splice(idx, 1)[0];
           if (!session.spamEmails) session.spamEmails = [];
           session.spamEmails.unshift(email);
+          markEmailsDirty(session);
           return res.json({ moved: true });
         }
       }
@@ -830,6 +852,7 @@ router.put('/email/:id/read', (req, res) => {
         if (email) {
           email.read = read;
           email.unread = !read;
+          markEmailsDirty(session);
           return res.json({ read });
         }
       }
@@ -865,6 +888,7 @@ router.delete('/email/:id', (req, res) => {
           const email = arr.splice(idx, 1)[0];
           if (!session.trashEmails) session.trashEmails = [];
           session.trashEmails.unshift(email);
+          markEmailsDirty(session);
           return res.json({ deleted: true });
         }
       }

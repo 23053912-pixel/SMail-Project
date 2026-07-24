@@ -22,7 +22,9 @@ function upsertSession(user) {
       spamEmails:     [],
       archivedEmails: [],
       nextPageTokens: {},
-      lastActive:     Date.now()
+      lastActive:     Date.now(),
+      _allEmailsCache: null,
+      _allEmailsDirty: true
     });
   } else {
     const s      = sessions.get(key);
@@ -30,6 +32,11 @@ function upsertSession(user) {
     s.lastActive = Date.now();
   }
   return sessions.get(key);
+}
+
+// Mark the deduped cache as stale (call after mutating any email array)
+function markEmailsDirty(session) {
+  session._allEmailsDirty = true;
 }
 
 // Purge sessions idle for more than 8 hours (prevents memory leak)
@@ -47,6 +54,9 @@ purgeStaleSessions();
 setInterval(purgeStaleSessions, 60 * 60 * 1000);
 
 function getAllEmailsDeduped(session) {
+  if (!session._allEmailsDirty && session._allEmailsCache) {
+    return session._allEmailsCache;
+  }
   const merged = [
     ...session.userEmails,
     ...session.sentEmails,
@@ -60,7 +70,10 @@ function getAllEmailsDeduped(session) {
   for (const email of merged) {
     if (!byId.has(email.id)) byId.set(email.id, email);
   }
-  return Array.from(byId.values()).sort((a, b) => new Date(b.date) - new Date(a.date));
+  const result = Array.from(byId.values()).sort((a, b) => new Date(b.date) - new Date(a.date));
+  session._allEmailsCache = result;
+  session._allEmailsDirty = false;
+  return result;
 }
 
 function isGoogleVerifiedSpam(email) {
@@ -91,6 +104,7 @@ module.exports = {
   sessions,
   getSession,
   upsertSession,
+  markEmailsDirty,
   getAllEmailsDeduped,
   isGoogleVerifiedSpam,
   getCachedFolder

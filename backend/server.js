@@ -16,7 +16,7 @@ function warmupMLModel() {
     r.on('end', () => console.log('✓ ML model pre-warmed (first prediction cached)'));
   });
   req.on('error', () => console.log('⚠ ML model warmup skipped (API not ready)'));
-  req.setTimeout(3000, () => req.abort());
+  req.setTimeout(3000, () => req.destroy());
   req.write(body);
   req.end();
 }

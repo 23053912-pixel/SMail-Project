@@ -62,7 +62,7 @@ async function predictSpam(emailText) {
     });
 
     req.on('timeout', () => {
-      req.abort();
+      req.destroy();
       reject(new Error('ML API request timeout'));
     });
 
@@ -131,7 +131,7 @@ async function warmupMLModel() {
   });
 
   req.on('error', () => console.log('⚠ ML model warmup skipped (API not ready)'));
-  req.on('timeout', () => req.abort());
+  req.on('timeout', () => req.destroy());
   
   req.write(body);
   req.end();
