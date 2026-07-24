@@ -1901,8 +1901,8 @@ body.theme-light {
   --bg-hover: rgba(6, 182, 212, 0.06);
   --bg-active: rgba(6, 182, 212, 0.1);
   --text-primary: #0f172a;
-  --text-secondary: #475569;
-  --text-muted: #94a3b8;
+  --text-secondary: #334155;
+  --text-muted: #64748b;
   --border: #e2e8f0;
   --border-light: #cbd5e1;
   --accent: #0891b2;
