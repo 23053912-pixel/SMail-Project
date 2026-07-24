@@ -89,6 +89,53 @@ function createGmailClient(accessToken) {
   return google.gmail({ version: 'v1', auth: oauth2Client });
 }
 
+// ── Refresh access token using refresh_token ───────────────────────────────────
+async function refreshAccessToken(session) {
+  const tokens = session.user?.tokens;
+  if (!tokens?.refresh_token) return null;
+  
+  try {
+    const oauth2Client = new OAuth2Client(
+      process.env.GOOGLE_CLIENT_ID,
+      process.env.GOOGLE_CLIENT_SECRET
+    );
+    oauth2Client.setCredentials({ refresh_token: tokens.refresh_token });
+    const { credentials } = await oauth2Client.refreshAccessToken();
+    
+    // Update session with new tokens
+    session.user.accessToken = credentials.access_token;
+    session.user.tokens = {
+      ...tokens,
+      access_token: credentials.access_token,
+      expiry_date: credentials.expiry_date
+    };
+    
+    console.log('Access token refreshed successfully');
+    return credentials.access_token;
+  } catch (err) {
+    console.error('Token refresh failed:', err.message);
+    return null;
+  }
+}
+
+// ── Get a valid access token, refreshing if needed ─────────────────────────────
+async function getValidAccessToken(session) {
+  const tokens = session.user?.tokens;
+  const accessToken = session.user?.accessToken;
+  
+  // If no tokens object or no refresh token, return what we have
+  if (!tokens?.refresh_token) return accessToken;
+  
+  // Check if token is expired (with 5 min buffer)
+  if (tokens.expiry_date && Date.now() < tokens.expiry_date - 300000) {
+    return accessToken;
+  }
+  
+  // Token might be expired, try refreshing
+  const refreshed = await refreshAccessToken(session);
+  return refreshed || accessToken;
+}
+
 // ── Fetch a paginated list of Gmail messages and parse full details ───────────
 async function fetchGmailMessageList(gmail, query, maxResults, userEmail, startPageToken = null) {
   const results = [];
@@ -335,5 +382,7 @@ module.exports = {
   fetchGmailEmails,
   extractBody,
   stripHtml,
-  withRetry
+  withRetry,
+  refreshAccessToken,
+  getValidAccessToken
 };

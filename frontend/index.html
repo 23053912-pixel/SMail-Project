@@ -43,10 +43,13 @@
   </div>
 
   <!-- Toast Notification -->
-  <div id="toast" class="toast hidden">
+  <div id="toast" class="toast hidden" role="alert" aria-live="polite">
     <span class="material-icons-outlined toast-icon">check_circle</span>
     <span id="toastMessage"></span>
   </div>
+
+  <!-- Sidebar backdrop (mobile) -->
+  <div id="sidebarBackdrop" class="sidebar-backdrop hidden"></div>
 
   <!-- Main Application -->
   <div id="mainApp" class="main-app hidden">
@@ -307,7 +310,7 @@
             <button class="compose-header-btn" title="Full screen" id="expandComposeBtn" aria-label="Full screen compose">
             <span class="material-icons-outlined">open_in_full</span>
           </button>
-          <button class="compose-header-btn" id="closeComposeBtn">
+          <button class="compose-header-btn" id="closeComposeBtn" aria-label="Close compose">
             <span class="material-icons-outlined">close</span>
           </button>
         </div>
@@ -381,6 +384,21 @@
         <input type="file" id="composeAttachInput" multiple hidden>
         <input type="file" id="composePhotoInput" accept="image/*" multiple hidden>
       </form>
+    </div>
+  </div>
+
+  <!-- Delete Confirmation Modal -->
+  <div id="deleteConfirmModal" class="modal-overlay hidden">
+    <div class="modal-card">
+      <div class="modal-icon">
+        <span class="material-icons-outlined">delete</span>
+      </div>
+      <h3>Move to Trash?</h3>
+      <p>This conversation will be moved to the trash folder.</p>
+      <div class="modal-actions">
+        <button id="deleteCancelBtn" class="modal-btn modal-btn-cancel">Cancel</button>
+        <button id="deleteConfirmBtn" class="modal-btn modal-btn-danger">Move to Trash</button>
+      </div>
     </div>
   </div>
 

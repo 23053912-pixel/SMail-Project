@@ -214,7 +214,7 @@ const callbackHandler = async (req, res) => {
     }
 
     console.log(`Authenticated user: ${email}`);
-    const userObj  = { id: googleId, email, name: name || email, picture: picture || '', provider: 'google', accessToken };
+    const userObj  = { id: googleId, email, name: name || email, picture: picture || '', provider: 'google', accessToken, tokens: fullTokens || null };
     const session  = upsertSession(userObj);
 
     if (!isDemo && code !== 'demo_code') {

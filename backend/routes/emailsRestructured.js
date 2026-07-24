@@ -8,6 +8,7 @@
 
 const express = require('express');
 const https = require('https');
+const multer = require('multer');
 const { requireAuth } = require('../middleware/auth');
 const { getCachedFolder, getAllEmailsDeduped } = require('../utils/session');
 const emailFetching = require('../services/emailFetching');
@@ -17,14 +18,18 @@ const emailSpamKeywordDetector = require('../services/emailSpamKeywordDetector')
 const emailProcessing = require('../services/emailProcessing');
 
 const router = express.Router();
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 
-// Lazily require db to avoid circular dependency
-let db = null;
-function getDb() {
-  if (!db) {
-    db = require('../server').db;
-  }
-  return db;
+function sanitizeHeader(str) {
+  return String(str || '').replace(/[\r\n]/g, '').trim();
+}
+
+function escapeHtmlEntities(str) {
+  return String(str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }
 
 const VALID_FOLDERS = new Set(['inbox', 'sent', 'drafts', 'trash', 'snoozed', 'spam', 'starred', 'important', 'all', 'archive']);
@@ -67,7 +72,8 @@ router.post('/emails/process', async (req, res) => {
       return res.status(400).json({ error: 'Invalid folder' });
     }
 
-    const gmail = emailFetching.createGmailClient(session.user.accessToken);
+    const accessToken = await emailFetching.getValidAccessToken(session);
+    const gmail = emailFetching.createGmailClient(accessToken);
     const query = QUERY_MAP[folder] || QUERY_MAP.inbox;
     
     const result = await emailProcessing.processEmails(
@@ -75,7 +81,7 @@ router.post('/emails/process', async (req, res) => {
       query,
       maxResults,
       session.user.email,
-      db
+      null
     );
 
     res.json({
@@ -99,7 +105,8 @@ router.post('/emails/refresh', async (req, res) => {
   }
 
   try {
-    const gmail = emailFetching.createGmailClient(session.user.accessToken);
+    const accessToken = await emailFetching.getValidAccessToken(session);
+    const gmail = emailFetching.createGmailClient(accessToken);
     const result = await emailFetching.fetchGmailMessageList(
       gmail,
       QUERY_MAP.inbox,
@@ -147,7 +154,8 @@ router.get('/emails/:folder', async (req, res) => {
   }
 
   try {
-    const gmail = emailFetching.createGmailClient(session.user.accessToken);
+    const accessToken = await emailFetching.getValidAccessToken(session);
+    const gmail = emailFetching.createGmailClient(accessToken);
     const result = await emailFetching.fetchGmailMessageList(
       gmail,
       QUERY_MAP[folder] || QUERY_MAP.inbox,
@@ -192,7 +200,8 @@ router.get('/emails/:folder/more', async (req, res) => {
   if (!pageToken) return res.json({ emails: [], hasMore: false });
 
   try {
-    const gmail = emailFetching.createGmailClient(session.user.accessToken);
+    const accessToken = await emailFetching.getValidAccessToken(session);
+    const gmail = emailFetching.createGmailClient(accessToken);
     const result = await emailFetching.fetchGmailMessageList(
       gmail,
       QUERY_MAP[folder] || QUERY_MAP.inbox,
@@ -257,8 +266,8 @@ router.post('/emails/spam-detect', async (req, res) => {
 });
 
 // ── POST /api/send ────────────────────────────────────────────────────────────
-// Send an email via Gmail API
-router.post('/send', async (req, res) => {
+// Send an email via Gmail API (supports file attachments)
+router.post('/send', upload.array('attachments', 10), async (req, res) => {
   const session = requireAuth(req, res);
   if (!session) return;
 
@@ -281,24 +290,53 @@ router.post('/send', async (req, res) => {
     return res.status(400).json({ error: 'Subject line too long (max 998 characters)' });
   }
 
-  const accessToken = session.user.accessToken;
+  const accessToken = await emailFetching.getValidAccessToken(session);
   if (!accessToken) {
     return res.status(401).json({ error: 'No access token. Please sign in again.' });
   }
 
   try {
-    // Build email in RFC 2822 format
-    // Sanitize body to prevent header injection (strip \r and \n from body content)
-    const safeBody = String(body).replace(/\r/g, '').replace(/\n/g, '<br>');
-    const raw = [
-      `From: ${session.user.email}`,
-      `To: ${to}`,
-      `Subject: ${subject}`,
-      'Content-Type: text/html; charset=utf-8',
-      'MIME-Version: 1.0',
-      '',
-      safeBody
-    ].join('\r\n');
+    // Sanitize headers to prevent injection, escape body HTML entities
+    const safeTo = sanitizeHeader(to);
+    const safeSubject = sanitizeHeader(subject);
+    const safeBody = escapeHtmlEntities(body).replace(/\n/g, '<br>');
+    const files = req.files || [];
+
+    let raw;
+    if (files.length === 0) {
+      raw = [
+        `From: ${session.user.email}`,
+        `To: ${safeTo}`,
+        `Subject: ${safeSubject}`,
+        'Content-Type: text/html; charset=utf-8',
+        'MIME-Version: 1.0',
+        '',
+        safeBody
+      ].join('\r\n');
+    } else {
+      const boundary = 'boundary_' + Date.now() + '_' + Math.random().toString(36).slice(2);
+      const parts = [];
+      parts.push(`From: ${session.user.email}`);
+      parts.push(`To: ${safeTo}`);
+      parts.push(`Subject: ${safeSubject}`);
+      parts.push('MIME-Version: 1.0');
+      parts.push(`Content-Type: multipart/mixed; boundary="${boundary}"`);
+      parts.push('');
+      parts.push(`--${boundary}`);
+      parts.push('Content-Type: text/html; charset=utf-8');
+      parts.push('');
+      parts.push(safeBody);
+      for (const file of files) {
+        parts.push(`--${boundary}`);
+        parts.push(`Content-Type: ${file.mimetype}; name="${file.originalname}"`);
+        parts.push('Content-Transfer-Encoding: base64');
+        parts.push(`Content-Disposition: attachment; filename="${file.originalname}"`);
+        parts.push('');
+        parts.push(file.buffer.toString('base64'));
+      }
+      parts.push(`--${boundary}--`);
+      raw = parts.join('\r\n');
+    }
 
     // Encode to base64url
     const encoded = Buffer.from(raw)
@@ -346,29 +384,18 @@ router.post('/send', async (req, res) => {
       const newEmail = {
         id: result.data.id || Date.now().toString(),
         from: session.user.email,
-        to,
-        subject,
+        to: safeTo,
+        subject: safeSubject,
         body,
         date: new Date(),
         read: true,
         starred: false
       };
 
-      // Save to database
+      // Save to session memory
       if (session.sentEmails) {
         session.sentEmails.unshift(newEmail);
       }
-
-      getDb().run(
-        `INSERT OR REPLACE INTO emails (id, sender, recipient, subject, body, date, labels, read, starred)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [newEmail.id, session.user.email, to, subject, body, new Date().toISOString(), 'SENT', 1, 0],
-        (err) => {
-          if (err) {
-            console.error('Database error saving sent email:', err.message);
-          }
-        }
-      );
 
       res.json({ success: true, message: 'Email sent successfully', email: newEmail });
     } else {
@@ -377,7 +404,7 @@ router.post('/send', async (req, res) => {
     }
   } catch (err) {
     console.error('Send error:', err.message);
-    res.status(500).json({ error: 'Failed to send email: ' + err.message });
+    res.status(500).json({ error: 'Failed to send email. Please try again.' });
   }
 });
 
@@ -416,22 +443,10 @@ router.post('/draft', (req, res) => {
       session.draftEmails.push(draft);
     }
 
-    // Save to database
-    getDb().run(
-      `INSERT OR REPLACE INTO emails (id, sender, recipient, subject, body, date, labels, read, starred)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [draft.id, session.user.email || 'draft', draft.to, draft.subject, draft.body, new Date().toISOString(), 'DRAFT', 0, 0],
-      (err) => {
-        if (err) {
-          console.error('Database error saving draft:', err.message);
-        }
-      }
-    );
-
     res.json({ success: true, message: 'Draft saved', draft });
   } catch (err) {
     console.error('Draft save error:', err.message);
-    res.status(500).json({ error: 'Failed to save draft: ' + err.message });
+    res.status(500).json({ error: 'Failed to save draft' });
   }
 });
 

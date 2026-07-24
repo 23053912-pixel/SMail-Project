@@ -220,9 +220,19 @@ document.addEventListener('DOMContentLoaded', () => {
   if (headerLogo) headerLogo.addEventListener('click', refreshAllEmails);
   if (headerBrand) headerBrand.addEventListener('click', refreshAllEmails);
   if (menuToggle && sidebar) {
+    const backdrop = document.getElementById('sidebarBackdrop');
     menuToggle.addEventListener('click', () => {
       sidebar.classList.toggle('sidebar-hidden');
+      if (backdrop) {
+        backdrop.classList.toggle('hidden', sidebar.classList.contains('sidebar-hidden'));
+      }
     });
+    if (backdrop) {
+      backdrop.addEventListener('click', () => {
+        sidebar.classList.add('sidebar-hidden');
+        backdrop.classList.add('hidden');
+      });
+    }
   }
 
   // Bind ALL folder buttons (including dynamically added ones)
@@ -384,6 +394,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   initComposeToolbar();
+  setupDeleteModal();
 
   // ── Auto-refresh inbox when user returns to browser tab ────────────────────
   document.addEventListener('visibilitychange', () => {
@@ -782,7 +793,8 @@ function renderEmailList() {
         e.stopPropagation();
         const action = btn.dataset.action;
         if (action === 'delete') {
-          handleQuickDelete(email.id);
+          pendingDeleteId = email.id;
+          document.getElementById('deleteConfirmModal').classList.remove('hidden');
         } else if (action === 'archive') {
           const jwtToken = localStorage.getItem('jwtToken');
           const headers  = jwtToken ? { 'Authorization': `Bearer ${jwtToken}` } : {};
@@ -798,9 +810,19 @@ function renderEmailList() {
             })
             .catch(() => showToast('Failed to archive', 'error'));
         } else if (action === 'read') {
-          showToast('Marked as read');
+          const jwtToken = localStorage.getItem('jwtToken');
+          const headers  = jwtToken ? { 'Authorization': `Bearer ${jwtToken}`, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' };
+          fetch(`/api/email/${email.id}/read`, { method: 'PUT', headers, body: JSON.stringify({ read: true }) })
+            .then(() => {
+              email.read = true;
+              email.unread = false;
+              renderEmailList();
+              updateUnreadCount();
+              showToast('Marked as read');
+            })
+            .catch(() => showToast('Failed to mark as read', 'error'));
         } else if (action === 'snooze') {
-          showToast('Snoozed');
+          showToast('Snooze coming soon', 'warning');
         }
       });
     });
@@ -1116,25 +1138,44 @@ function backToList() {
 }
 
 // ============ Delete Email ============
-async function handleDeleteEmail() {
+let pendingDeleteId = null;
+function handleDeleteEmail() {
   if (!currentEmail) return;
-  try {
-    const jwtToken = localStorage.getItem('jwtToken');
-    const headers = {};
-    if (jwtToken) headers['Authorization'] = `Bearer ${jwtToken}`;
+  pendingDeleteId = currentEmail.id;
+  document.getElementById('deleteConfirmModal').classList.remove('hidden');
+}
 
-    const response = await fetch(`/api/email/${currentEmail.id}`, { method: 'DELETE', headers });
-    if (response.ok) {
-      showToast('Moved to trash');
-      backToList();
-      loadEmails();
-    } else {
-      showToast('Failed to delete', 'error');
+function setupDeleteModal() {
+  const cancelBtn = document.getElementById('deleteCancelBtn');
+  const confirmBtn = document.getElementById('deleteConfirmBtn');
+  const modal = document.getElementById('deleteConfirmModal');
+  if (cancelBtn) cancelBtn.addEventListener('click', () => { modal.classList.add('hidden'); pendingDeleteId = null; });
+  if (confirmBtn) confirmBtn.addEventListener('click', async () => {
+    modal.classList.add('hidden');
+    if (!pendingDeleteId) return;
+    try {
+      const jwtToken = localStorage.getItem('jwtToken');
+      const headers = {};
+      if (jwtToken) headers['Authorization'] = `Bearer ${jwtToken}`;
+      const response = await fetch(`/api/email/${pendingDeleteId}`, { method: 'DELETE', headers });
+      if (response.ok) {
+        showToast('Moved to trash');
+        if (currentEmail?.id === pendingDeleteId) backToList();
+        emails = emails.filter(e => e.id !== pendingDeleteId);
+        renderEmailList();
+        updateEmailCount();
+        updateUnreadCount();
+      } else {
+        showToast('Failed to delete', 'error');
+      }
+    } catch (error) {
+      showToast('Delete failed', 'error');
     }
-  } catch (error) {
-    console.error('Error deleting email:', error);
-    showToast('Delete failed', 'error');
-  }
+    pendingDeleteId = null;
+  });
+  if (modal) modal.addEventListener('click', (e) => {
+    if (e.target === modal) { modal.classList.add('hidden'); pendingDeleteId = null; }
+  });
 }
 
 // ============ Toggle Star ============
@@ -1335,13 +1376,25 @@ async function handleSendEmail(e) {
 
   try {
     const jwtToken = localStorage.getItem('jwtToken');
+    const formData = new FormData();
+    formData.append('to', to);
+    formData.append('subject', subject);
+    formData.append('body', body);
+
+    // Attach files
+    const attachInput = document.getElementById('composeAttachInput');
+    const photoInput = document.getElementById('composePhotoInput');
+    if (attachInput?.files) {
+      Array.from(attachInput.files).forEach(f => formData.append('attachments', f));
+    }
+    if (photoInput?.files) {
+      Array.from(photoInput.files).forEach(f => formData.append('attachments', f));
+    }
+
     const response = await fetch('/api/send', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(jwtToken ? { 'Authorization': `Bearer ${jwtToken}` } : {})
-      },
-      body: JSON.stringify({ to, subject, body })
+      headers: jwtToken ? { 'Authorization': `Bearer ${jwtToken}` } : {},
+      body: formData
     });
     const data = await response.json();
     if (response.ok && data.success) {
@@ -1408,6 +1461,8 @@ function handleFolderChange(e) {
   // Close sidebar on mobile after folder selection
   if (window.innerWidth <= 768 && sidebar && !sidebar.classList.contains('sidebar-hidden')) {
     sidebar.classList.add('sidebar-hidden');
+    const backdrop = document.getElementById('sidebarBackdrop');
+    if (backdrop) backdrop.classList.add('hidden');
   }
   
   showEmailList();
