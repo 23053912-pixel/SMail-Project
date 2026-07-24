@@ -60,6 +60,27 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
+// ── CSRF protection: reject cross-origin mutations ───────────────────────────
+// Session cookie uses sameSite:'strict' (primary defense), this is a second layer.
+app.use((req, res, next) => {
+  const method = req.method.toUpperCase();
+  if (method !== 'POST' && method !== 'PUT' && method !== 'DELETE') return next();
+
+  // Skip CSRF for OAuth callback (Google redirects here without our Origin)
+  if (req.path === '/callback') return next();
+
+  const origin = req.headers.origin || req.headers.referer;
+  if (!origin) return next(); // Non-browser clients (curl, Postman) — rely on JWT auth
+
+  try {
+    const url = new URL(origin);
+    const requestOrigin = url.origin;
+    if (requestOrigin === ALLOWED_ORIGIN) return next();
+  } catch { /* invalid URL — reject */ }
+
+  return res.status(403).json({ error: 'Cross-origin request rejected' });
+});
+
 // ── Body parser + static files ────────────────────────────────────────────────
 app.use(express.json({ limit: '256kb' }));
 app.use(express.static(path.join(__dirname, '../frontend'), {
