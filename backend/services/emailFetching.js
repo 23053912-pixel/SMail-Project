@@ -140,6 +140,16 @@ async function fetchGmailMessageList(gmail, query, maxResults, userEmail, startP
             const labels   = message.data.labelIds || [];
             const { text, html } = extractBody(message.data.payload);
             const bodyText = text || (html ? stripHtml(html) : '');
+            const cleanBody = (bodyText || '(No content)')
+              .replace(/<[^>]*>/g, ' ')
+              .replace(/&nbsp;/g, ' ')
+              .replace(/&amp;/g, '&')
+              .replace(/&lt;/g, '<')
+              .replace(/&gt;/g, '>')
+              .replace(/&quot;/g, '"')
+              .replace(/\s+/g, ' ')
+              .trim();
+
             results.push({
               id:       message.data.id,
               threadId: message.data.threadId,
@@ -148,7 +158,7 @@ async function fetchGmailMessageList(gmail, query, maxResults, userEmail, startP
               subject:  get('subject') || '(No Subject)',
               body:     bodyText || '(No content)',
               bodyHtml: html || '',
-              preview:  bodyText.substring(0, 200),
+              preview:  cleanBody.substring(0, 200),
               date:     new Date(get('date') || new Date().toISOString()),
               read:     !labels.includes('UNREAD'),
               unread:   labels.includes('UNREAD'),

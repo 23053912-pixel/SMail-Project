@@ -71,6 +71,21 @@ function escHtml(s) {
     .replace(/'/g, '&#x27;');
 }
 
+function stripHtml(html) {
+  return String(html || '')
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<!DOCTYPE[^>]*>/gi, '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function applyTheme(theme) {
   const targetTheme = theme === 'light' ? 'light' : 'dark';
   document.body.classList.toggle('theme-light', targetTheme === 'light');
@@ -722,7 +737,7 @@ function renderEmailList() {
 
     const fromName = (email.from || '').replace(/<.*?>/g, '').replace(/"/g, '').trim() || 'Unknown';
     const subject = email.subject || '(No Subject)';
-    const snippet = email.preview || email.snippet || (email.body ? email.body.substring(0, 120) : '');
+    const snippet = stripHtml(email.preview || email.snippet || (email.body ? email.body.substring(0, 120) : ''));
 
     div.innerHTML = `
       <input type="checkbox" class="email-item-checkbox" onclick="event.stopPropagation()">
@@ -1388,6 +1403,11 @@ function handleFolderChange(e) {
   } else {
     // Pause auto-refresh for other folders
     if (autoRefreshTimer) clearInterval(autoRefreshTimer);
+  }
+  
+  // Close sidebar on mobile after folder selection
+  if (window.innerWidth <= 768 && sidebar && !sidebar.classList.contains('sidebar-hidden')) {
+    sidebar.classList.add('sidebar-hidden');
   }
   
   showEmailList();

@@ -1293,14 +1293,6 @@ body {
     flex-direction: column;
   }
 
-  .sidebar {
-    width: 100%;
-    flex-direction: row;
-    overflow-x: auto;
-    padding: 8px;
-    border-bottom: 1px solid #e0e0e0;
-  }
-
   .compose-btn {
     padding: 8px 16px;
     white-space: nowrap;
@@ -2332,8 +2324,26 @@ body.theme-light .emoji-btn:hover { background: rgba(0,0,0,0.06); }
   }
 
   .sidebar {
-    width: 100%;
-    padding: 8px;
+    position: fixed;
+    top: 62px;
+    left: 0;
+    width: 280px;
+    height: calc(100vh - 62px);
+    z-index: 900;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    box-shadow: none;
+    border-right: 1px solid #e0e0e0;
+  }
+
+  .sidebar:not(.sidebar-hidden) {
+    transform: translateX(0);
+    box-shadow: 4px 0 20px rgba(0,0,0,0.15);
+  }
+
+  .sidebar.sidebar-hidden {
+    display: block;
+    transform: translateX(-100%);
   }
 
   .compose-btn {
