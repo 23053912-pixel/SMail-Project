@@ -1,30 +1,8 @@
-﻿// Email storage via Gmail API + Session cache (Stateless design for cloud deployment)
+﻿'use strict';
+
+// Email storage via Gmail API + Session cache (Stateless design for cloud deployment)
 const path = require('path');
-
-// ── Pre-warm ML model at startup for instant first prediction ────────────────
-function warmupMLModel() {
-  const https = require('https');
-  const ML_HOST = process.env.ML_API_HOST || 'localhost';
-  const ML_PORT = parseInt(process.env.ML_API_PORT || '5001', 10);
-  const warmupText = 'This is a test email for model warmup';
-  const body = JSON.stringify({ text: warmupText });
-  const headers = { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) };
-  const opts = { hostname: ML_HOST, port: ML_PORT, path: '/predict', method: 'POST', headers };
-  const req = require('http').request(opts, (r) => {
-    let data = '';
-    r.on('data', chunk => { data += chunk; });
-    r.on('end', () => console.log('✓ ML model pre-warmed (first prediction cached)'));
-  });
-  req.on('error', () => console.log('⚠ ML model warmup skipped (API not ready)'));
-  req.setTimeout(3000, () => req.destroy());
-  req.write(body);
-  req.end();
-}
-
-// Warmup after brief delay to allow ML API startup
-setTimeout(warmupMLModel, 2000);
-'use strict';
-require('dotenv').config({ path: require('path').join(__dirname, '.env') });
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 // ── Fail fast if JWT_SECRET is missing ───────────────────────────────────────
 if (!process.env.JWT_SECRET) {
@@ -139,4 +117,8 @@ app.get('/', (req, res) => {
 // ── Start ─────────────────────────────────────────────────────────────────────
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`SMail Server running — open in browser: ${BASE_URL}`);
+
+  // Pre-warm ML model after brief delay to allow ML API startup
+  const { warmupMLModel } = require('./services/spamDetection');
+  setTimeout(warmupMLModel, 2000);
 });

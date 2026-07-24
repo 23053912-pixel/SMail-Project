@@ -38,7 +38,7 @@ ML_INTERNAL_TOKEN  = os.environ.get('ML_INTERNAL_TOKEN', '')  # shared secret wi
 pipeline = None   # set when using the trainer pipeline (spam_pipeline.pkl)
 
 # ── Cache NLTK resources globally (loaded once at startup, not per-prediction) ──
-_nltk_porter_stemmer = None
+_nltk_lemmatizer = None
 _nltk_stopwords = None
 
 
@@ -50,13 +50,16 @@ def _sigmoid(x: float) -> float:
 
 # ── Text preprocessing (mirrors the notebook transform_text) ─────────────────
 def _ensure_nltk():
-    global _nltk_porter_stemmer, _nltk_stopwords
+    global _nltk_lemmatizer, _nltk_stopwords
     import nltk
     # Map download name → resource path used by nltk.data.find()
+    # NOTE: wordnet + omw-1.4 are required for WordNetLemmatizer (matches training default)
     resources = {
         'punkt':     'tokenizers/punkt',
         'punkt_tab': 'tokenizers/punkt_tab',
         'stopwords': 'corpora/stopwords',
+        'wordnet':   'corpora/wordnet',
+        'omw-1.4':   'corpora/omw-1.4',
     }
     for pack, path in resources.items():
         try:
@@ -64,28 +67,28 @@ def _ensure_nltk():
         except LookupError:
             log.info(f'Downloading NLTK resource: {pack}')
             nltk.download(pack, quiet=True)
-    
+
     # Cache NLTK resources globally to avoid repeated imports
     from nltk.corpus import stopwords
-    from nltk.stem.porter import PorterStemmer
-    _nltk_porter_stemmer = PorterStemmer()
+    from nltk.stem import WordNetLemmatizer
+    _nltk_lemmatizer = WordNetLemmatizer()
     _nltk_stopwords = set(stopwords.words('english'))
 
 
 def transform_text(text):
-    """Tokenize, remove stop-words, stem – same pipeline used for training."""
-    global _nltk_porter_stemmer, _nltk_stopwords
+    """Tokenize, remove stop-words, lemmatize – same pipeline used for training."""
+    global _nltk_lemmatizer, _nltk_stopwords
     try:
         import nltk
-        # Use cached stemmer and stopwords (pre-loaded at startup)
-        ps = _nltk_porter_stemmer
+        # Use cached lemmatizer and stopwords (pre-loaded at startup)
+        lemmatizer = _nltk_lemmatizer
         stop_words = _nltk_stopwords
-        
+
         text = str(text).lower()
         tokens = nltk.word_tokenize(text)
         tokens = [t for t in tokens if t.isalnum()]
         tokens = [t for t in tokens if t not in stop_words and t not in string.punctuation]
-        tokens = [ps.stem(t) for t in tokens]
+        tokens = [lemmatizer.lemmatize(t) for t in tokens]
         return ' '.join(tokens)
     except Exception:
         # Graceful fallback if NLTK is unavailable
@@ -210,6 +213,8 @@ def retrain():
 @app.route('/predict_batch', methods=['POST'])
 def predict_batch():
     """Batch predict endpoint for multiple texts."""
+    MAX_BATCH_SIZE = 50
+
     if ML_INTERNAL_TOKEN:
         provided = request.headers.get('X-Internal-Token', '')
         if provided != ML_INTERNAL_TOKEN:
@@ -224,6 +229,8 @@ def predict_batch():
     texts = data.get('texts', [])
     if not isinstance(texts, list) or len(texts) == 0:
         return jsonify({'error': 'No texts provided (expected list)'}), 400
+    if len(texts) > MAX_BATCH_SIZE:
+        return jsonify({'error': f'Batch too large. Max {MAX_BATCH_SIZE} texts per request.'}), 400
 
     results = []
     classifier = pipeline.named_steps.get('model')

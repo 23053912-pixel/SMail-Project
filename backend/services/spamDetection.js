@@ -14,6 +14,9 @@ const ML_HOST = process.env.ML_API_HOST || 'localhost';
 const ML_PORT = parseInt(process.env.ML_API_PORT || '5001', 10);
 const ML_PROTOCOL = ML_PORT === 443 ? https : http;
 
+// Persistent HTTP agent for connection reuse (avoids TCP handshake per request)
+const _keepAliveAgent = new http.Agent({ keepAlive: true, maxSockets: 10 });
+
 /**
  * Call ML API to predict if an email is spam
  * @param {string} emailText - Email body/subject combined text
@@ -33,7 +36,8 @@ async function predictSpam(emailText) {
       path: '/predict',
       method: 'POST',
       headers,
-      timeout: 10000
+      timeout: 10000,
+      agent: _keepAliveAgent
     };
 
     const req = ML_PROTOCOL.request(options, (res) => {
@@ -72,36 +76,49 @@ async function predictSpam(emailText) {
 }
 
 /**
- * Batch predict spam for multiple emails
+ * Batch predict spam for multiple emails (parallel, max 5 concurrent)
  * @param {Array} emails - Array of email objects with body/subject
  * @returns {Promise<Array>} Array of predictions with email id and spam result
  */
 async function predictSpamBatch(emails) {
-  const predictions = [];
-  
-  for (const email of emails) {
+  const BATCH_CONCURRENCY = 5;
+
+  const tasks = emails.map(async (email) => {
     try {
       const emailText = `${email.subject || ''} ${email.body || ''}`;
       const prediction = await predictSpam(emailText);
-      
-      predictions.push({
+      return {
         emailId: email.id,
         ...prediction,
         processedAt: new Date().toISOString()
-      });
+      };
     } catch (err) {
       console.error(`Spam prediction error for email ${email.id}:`, err.message);
-      predictions.push({
+      return {
         emailId: email.id,
         isSpam: false,
         probability: 0,
         error: err.message,
         processedAt: new Date().toISOString()
-      });
+      };
     }
+  });
+
+  // Run in batches of BATCH_CONCURRENCY to avoid overwhelming the ML API
+  const results = [];
+  for (let i = 0; i < tasks.length; i += BATCH_CONCURRENCY) {
+    const batch = tasks.slice(i, i + BATCH_CONCURRENCY);
+    const settled = await Promise.allSettled(batch);
+    results.push(...settled.map(r => r.status === 'fulfilled' ? r.value : {
+      emailId: emails[i]?.id,
+      isSpam: false,
+      probability: 0,
+      error: r.reason?.message || 'Unknown error',
+      processedAt: new Date().toISOString()
+    }));
   }
-  
-  return predictions;
+
+  return results;
 }
 
 /**
@@ -121,7 +138,8 @@ async function warmupMLModel() {
     path: '/predict',
     method: 'POST',
     headers,
-    timeout: 3000
+    timeout: 3000,
+    agent: _keepAliveAgent
   };
 
   const req = ML_PROTOCOL.request(options, (res) => {
