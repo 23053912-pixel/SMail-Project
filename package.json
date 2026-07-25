@@ -8,7 +8,7 @@
   "scripts": {
     "start": "node backend/server.js",
     "dev": "node backend/server.js",
-    "test": "node --test backend/__tests__/emailHelpers.test.js backend/__tests__/email-crud.test.js backend/__tests__/email-scan.test.js",
+    "test": "node --test backend/__tests__/emailHelpers.test.js backend/__tests__/email-crud.test.js backend/__tests__/email-scan.test.js backend/__tests__/spamDetection.test.js",
     "docker:build": "docker build -t smail-backend:latest -f Dockerfile.backend .",
     "docker:build:ml": "docker build -t smail-ml-api:latest -f ml-engine/core/predictive/Dockerfile ./ml-engine/core/predictive",
     "docker:compose": "docker-compose up -d",
